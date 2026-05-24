@@ -1,5 +1,11 @@
-export const fmtSalary = (n) =>
-  '$' + Number(n).toLocaleString('en-US');
+export const fmtSalary = (n) => {
+  const s = String(n ?? '').trim();
+  const parts = s.split(/\s+/);
+  const num = parseFloat(parts[0]);
+  if (isNaN(num)) return s || '—';
+  const formatted = num.toLocaleString('en-US');
+  return parts[1] ? `${formatted} ${parts[1]}` : `$${formatted}`;
+};
 
 export const fmtK = (n) =>
   n >= 1000 ? '$' + (n / 1000).toFixed(0) + 'K' : '$' + n;

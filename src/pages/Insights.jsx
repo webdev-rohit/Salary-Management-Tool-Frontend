@@ -4,18 +4,21 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../components/Toast';
 import Sidebar from '../components/Sidebar';
 import { getDepartments, getHeadcount, getTopEarners, getCountryStats, getJobTitleAvg } from '../api/insights';
-import { fmtSalary, fmtK, initials, avatarColor, deptBadge } from '../utils/format';
+import { fmtSalary, initials, avatarColor, deptBadge } from '../utils/format';
 
 Chart.register(...registerables);
 
 const DEPT_COLORS = ['#0D9488','#6366F1','#7C3AED','#EC4899','#F59E0B','#6B7280','#10B981','#EF4444','#0EA5E9','#D97706'];
 const COUNTRY_COLORS = ['#6366F1','#10B981','#F59E0B','#EF4444','#0EA5E9','#8B5CF6','#F97316'];
 
-const COUNTRY_FLAGS = {
-  'USA': '🇺🇸', 'United Kingdom': '🇬🇧', 'Canada': '🇨🇦', 'India': '🇮🇳',
-  'Spain': '🇪🇸', 'Germany': '🇩🇪', 'Australia': '🇦🇺', 'France': '🇫🇷',
-  'Singapore': '🇸🇬', 'Brazil': '🇧🇷',
-};
+// Parse numeric portion from salary strings like "636143.00 INR" or plain numbers
+const parseSalaryNum = (s) => parseFloat(String(s).split(' ')[0]) || 0;
+
+// Format large numbers for chart axis without currency symbol
+const fmtAxis = (v) =>
+  v >= 1_000_000 ? (v / 1_000_000).toFixed(1) + 'M'
+  : v >= 1_000   ? (v / 1_000).toFixed(0) + 'K'
+  : String(v);
 
 function useChart(canvasRef, config, deps) {
   const chartRef = useRef(null);
@@ -85,9 +88,9 @@ export default function Insights() {
     fetchEarners();
   }, [earnerN]);
 
-  // Department bar chart
+  // Department bar chart — parse salary strings to numbers before passing to Chart.js
   const deptLabels = deptData.map((d) => d.department);
-  const deptAvgs = deptData.map((d) => d.avg_salary ?? d.average_salary ?? d.avg ?? 0);
+  const deptAvgs   = deptData.map((d) => parseSalaryNum(d.avg_salary ?? d.average_salary ?? d.avg ?? 0));
 
   useChart(deptChartRef, deptData.length ? {
     type: 'bar',
@@ -107,11 +110,11 @@ export default function Insights() {
       responsive: true, maintainAspectRatio: true,
       plugins: {
         legend: { display: false },
-        tooltip: { callbacks: { label: (ctx) => ' ' + fmtSalary(ctx.raw) + ' avg' } },
+        tooltip: { callbacks: { label: (ctx) => ' ' + Number(ctx.raw).toLocaleString() + ' avg' } },
       },
       scales: {
         x: { grid: { display: false }, ticks: { font: { family: 'Inter', size: 12 }, color: '#64748B' } },
-        y: { grid: { color: '#F1F5F9' }, ticks: { font: { family: 'Inter', size: 11 }, color: '#94A3B8', callback: (v) => fmtK(v) }, beginAtZero: true },
+        y: { grid: { color: '#F1F5F9' }, ticks: { font: { family: 'Inter', size: 11 }, color: '#94A3B8', callback: fmtAxis }, beginAtZero: true },
       },
     },
   } : null, [deptData]);
@@ -260,7 +263,7 @@ export default function Insights() {
                             <div key={h.country} className="legend-item">
                               <div className="legend-left">
                                 <div className="legend-dot" style={{ background: COUNTRY_COLORS[i % COUNTRY_COLORS.length] }} />
-                                <span className="legend-label">{COUNTRY_FLAGS[h.country] || '🌍'} {h.country}</span>
+                                <span className="legend-label">{h.country}</span>
                               </div>
                               <span className="legend-val">{h.headcount ?? h.count} emp</span>
                             </div>
@@ -296,8 +299,8 @@ export default function Insights() {
                         <div className="q-label">Select Country</div>
                         <select className="q-select" value={countryQ} onChange={(e) => setCountryQ(e.target.value)}>
                           <option value="">Choose…</option>
-                          {(uniqueCountries.length ? uniqueCountries : Object.keys(COUNTRY_FLAGS)).map((c) => (
-                            <option key={c} value={c}>{COUNTRY_FLAGS[c] || '🌍'} {c}</option>
+                          {uniqueCountries.map((c) => (
+                            <option key={c} value={c}>{c}</option>
                           ))}
                         </select>
                       </div>
@@ -309,7 +312,7 @@ export default function Insights() {
                             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                           </svg>
                         )}
-                        Query
+                        Submit
                       </button>
                     </div>
                     {countryResult && (
@@ -372,8 +375,8 @@ export default function Insights() {
                         <div className="q-label">Country</div>
                         <select className="q-select" value={titleCountryQ} onChange={(e) => setTitleCountryQ(e.target.value)}>
                           <option value="">Any</option>
-                          {(uniqueCountries.length ? uniqueCountries : Object.keys(COUNTRY_FLAGS)).map((c) => (
-                            <option key={c} value={c}>{COUNTRY_FLAGS[c] || '🌍'} {c}</option>
+                          {uniqueCountries.map((c) => (
+                            <option key={c} value={c}>{c}</option>
                           ))}
                         </select>
                       </div>
@@ -385,7 +388,7 @@ export default function Insights() {
                             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
                           </svg>
                         )}
-                        Query
+                        Submit
                       </button>
                     </div>
                     {titleResult && (
@@ -447,7 +450,6 @@ export default function Insights() {
                     const badge = deptBadge(emp.department);
                     const maxSal = topEarners[0]?.salary ?? 1;
                     const pct = Math.round((emp.salary / maxSal) * 100);
-                    const flag = COUNTRY_FLAGS[emp.country] || '🌍';
                     return (
                       <div key={emp.id ?? i} className="earner-row">
                         <div className={`earner-rank ${rankClass}`}>{rank}</div>
@@ -456,7 +458,7 @@ export default function Insights() {
                         </div>
                         <div className="earner-info">
                           <div className="earner-name">{emp.full_name}</div>
-                          <div className="earner-meta">{emp.job_title} · {flag} {emp.country}</div>
+                          <div className="earner-meta">{emp.job_title} · {emp.country}</div>
                         </div>
                         <span className="earner-badge" style={{ background: badge.bg, color: badge.color }}>
                           {emp.department}
